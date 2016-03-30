@@ -1,0 +1,5 @@
+name = Gold prices
+description = Shows the daily gold prices in a block
+core = 7.x
+;
+configure = admin/config/content/goldprices

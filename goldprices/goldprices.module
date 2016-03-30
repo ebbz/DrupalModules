@@ -1,0 +1,321 @@
+<?php
+/**
+ * @file
+ * A block module that displays the gold prices based on the configured day price
+ */
+ 
+ /**
+ * Implements hook_help().
+ *
+ * Displays help and module information.
+ *
+ * @param path 
+ *   Which path of the site we're using to display help
+ * @param arg 
+ *   Array that holds the current path as returned from arg() function
+ */
+function goldprices_help($path, $arg) {
+  switch ($path) {
+    case "admin/help#goldprices":
+      return '<p>' . t("Displays the gold prices based on the configured day price") . '</p>';
+      break;
+  }
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function goldprices_block_info() {
+  $blocks['goldprices'] = array(
+    // The name that will appear in the block list.
+    'info' => t('Gold Prices'),
+    // Default setting.
+    'cache' => DRUPAL_CACHE_PER_ROLE,
+  );
+  return $blocks;
+}
+
+class goldprice
+{
+	public $carat;
+	public $percentage;
+	
+	function __construct($carat,$percentage)
+	{
+		$this->carat = $carat;
+		$this->percentage = $percentage;
+	}
+	
+	public function getPrice($dailyprice, $margin, $multiply)
+	{
+		$returnprice = ((($dailyprice - $margin) / 1000) * $multiply * $this->percentage);		
+		return "€" . number_format((float)$returnprice, 2, ',', '');
+	}
+	
+	public function getPercentage()
+	{
+		$percentage = $this->percentage * 100;
+		return number_format((float)$percentage, 1, ',', '');
+	}
+}
+
+/**
+ * Implements hook_block_view().
+ * 
+ * Prepares the contents of the block.
+ */
+function goldprices_block_view($delta = '') {
+  switch ($delta) {
+    case 'goldprices':
+      $block['subject'] = t('@block_title', array('@block_title' => variable_get('goldprice_block_title', 'Gold Prices')));
+      if (user_access('access content')) {
+		
+		$dailyprice = variable_get('goldprice_dailyprice', '0.00');
+		$margin = variable_get('goldprice_margin', '600.00');
+		$multiply = variable_get('goldprice_multiply', '0.9');
+		$goldprices = _renderContent('block');
+		
+		//Array to contain items for the block to render.
+		$outputarray = array();
+		//Iterate over the resultset and format as links.
+		foreach ($goldprices as $price){
+			$outputarray[] = array
+			(
+				'data' => format_string('@carat karaat goud: @outputprice', 
+					array(
+					'@carat' => $price->carat,
+					'@outputprice' => $price->getPrice($dailyprice, $margin, $multiply)
+					)
+				)
+			);
+		}		
+		//var_dump($outputarray);        
+		 
+        $block['content']['prices'] = array(
+			'#theme' => 'item_list__goldprices__block',
+			'#items' => $outputarray,
+		);
+		$block['content']['more'] = array(
+			'#theme' => 'more_link__goldprices',
+			'#url' => 'dagkoersen',
+			'#title' => t('Bekijk alle dagkoersen.'),
+		 );
+		
+      }
+    return $block;
+  }
+}
+
+function _renderContent($type)
+{	
+	switch ($type)
+	{
+		case 'block':
+			$goldprices[0] = new goldprice(8,0.333);
+			$goldprices[1] = new goldprice(14,0.585);
+			$goldprices[2] = new goldprice(18,0.75);
+			$goldprices[3] = new goldprice(20,0.833);			
+			//$goldprices[4] = new goldprice(22,0.916);
+			//$goldprices[5] = new goldprice(24,0.999);**/
+		break;
+		case 'page':
+			$goldprices[0] = new goldprice(8,0.333);
+			$goldprices[1] = new goldprice(14,0.585);
+			$goldprices[2] = new goldprice(18,0.75);
+			$goldprices[3] = new goldprice(20,0.833);
+			$goldprices[4] = new goldprice(21,0.875);
+			$goldprices[5] = new goldprice(22,0.916);
+			$goldprices[6] = new goldprice(24,0.999);
+		break;
+	}
+	return $goldprices;
+}
+
+/**
+ * Custom page callback function, declared in goldprices_menu().
+ */
+function _goldprices_page() {	
+	$dailyprice = variable_get('goldprice_dailyprice', '0.00');
+	$margin = variable_get('goldprice_margin', '600.00');
+	$multiply = variable_get('goldprice_multiply', '0.9');
+	$goldprices = _renderContent('page');
+	
+	//Array to contain items for the page to render.
+	$outputarray = array();
+	
+	foreach ($goldprices as $price){
+		$outputarray[] = array
+		(
+			'carat' => format_string('@carat karaat goud:',
+				array(
+				'@carat' => $price->carat
+				)
+			),
+			'percentage' => $price->getPercentage(),
+			'price' => $price->getPrice($dailyprice, $margin, $multiply),
+		);
+	}
+	
+	$header = array('', 'Goudpercentage' ,'Prijs per gram');
+	$last_changed_date = variable_get('goldprice_changeddate', '');
+	$last_changed = format_string('Koers laatst aangepast op: @day-@month-@year', 
+								array(	'@day' => $last_changed_date['day'],
+										'@month' => $last_changed_date['month'],
+										'@year' => $last_changed_date['year']));
+	
+	$colgroup = array(
+      array(
+        array(
+          'style' => array('width:60%')
+        ),
+		array(
+          'style' => array('width:20%')
+        ),
+		array(
+          'style' => array('width:20%')
+        )
+      )
+    );
+
+	$page_array['current_posts_arguments'] = array(
+      '#title' => t('All gold prices'),
+	  '#header' => $header,
+      '#rows' => $outputarray,  
+      '#theme' => 'table',
+	  '#caption' => $last_changed,
+	  '#attributes' => array (
+		'class' => array('goldprices_table'),
+	  ),
+	  '#colgroups' => $colgroup,
+    );
+    return $page_array;
+}
+
+/**
+ * Implements hook_menu().
+ */
+function goldprices_menu() {
+  $items = array();
+
+  $items['admin/config/content/goldprices'] = array(
+    'title' => 'Gold Prices',
+    'description' => 'Configure the prices shown in the block',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('goldprices_form'),
+    'access arguments' => array('administer goldprices settings'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['dagkoersen'] = array(
+	'title' => 'Dagkoersen oud goud',
+	'page callback' => '_goldprices_page',
+	'access arguments' => array('access content'),
+	'type' => MENU_NORMAL_ITEM,
+	'menu_name' => 'main-menu',
+   );
+
+  return $items;
+}
+
+/**
+ * Page callback: Settings for the module
+ */
+function goldprices_form($form, &$form_state) {
+  $form['goldprice_block_title'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Daily gold price block title'),
+    '#default_value' => variable_get('goldprice_block_title', 'Gold Prices'),
+    '#size' => 50,
+    '#maxlength' => 50,
+    '#description' => t('The block title.'),
+    '#required' => TRUE,
+  );
+  $form['goldprice_dailyprice'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Daily gold price'),
+    '#default_value' => variable_get('goldprice_dailyprice', '100.00'),
+    '#size' => 25,
+    '#maxlength' => 25,
+    '#description' => t('The daily goldprice.'),
+    '#required' => TRUE,
+  );
+  $form['goldprice_margin'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Margin'),
+    '#default_value' => variable_get('goldprice_margin', '600.00'),
+    '#size' => 25,
+    '#maxlength' => 25,
+    '#description' => t('The margin.'),
+    '#required' => TRUE,
+  );
+  $form['goldprice_multiply'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Multiply value'),
+    '#default_value' => variable_get('goldprice_multiply', '0.9'),
+    '#size' => 5,
+    '#maxlength' => 5,
+    '#description' => t('The multiply rate.'),
+    '#required' => TRUE,
+  );
+  $form['goldprice_changeddate_current'] = array(
+    '#type' => 'date',
+	'#title' => t('Current changed date'),
+	'#description' => t('The date the goldprices were last changed.'),
+    '#required' => FALSE,
+	'#default_value' => variable_get('goldprice_changeddate', ''),
+	'#disabled' => 'true'
+  );
+  $form['goldprice_changeddate'] = array(
+    '#type' => 'date',
+	'#title' => t('Last changed date'),
+	'#description' => t('The date the goldprices were last changed.'),
+    '#required' => TRUE,
+  );
+
+  return system_settings_form($form);
+}
+
+/**
+* Function to use in the validation process,
+* Check is $number is a valid value to be a positive currency amount
+**/
+function isCurrency($number)
+{
+  return preg_match("/^[0-9]+(?:\.[0-9]{1,2})?$/", $number);
+}
+
+/**
+ * Implements validation from the Form API.
+ * 
+ * @param $form
+ *   A structured array containing the elements and properties of the form.
+ * @param $form_state
+ *   An array that stores information about the form's current state 
+ *   during processing.
+ */
+function goldprices_form_validate($form, &$form_state){
+  $dailyprice = $form_state['values']['goldprice_dailyprice'];
+  $margin = $form_state['values']['goldprice_margin'];
+  $multiply = $form_state['values']['goldprice_multiply'];
+  if (!isCurrency($dailyprice)){
+    form_set_error('goldprice_dailyprice', t('You must enter a valid amount of money.'));
+  }
+  if (!isCurrency($margin)){
+    form_set_error('goldprice_margin', t('You must enter a valid amount of money.'));
+  }
+  if (($multiply > 1 || $multiply < 0) && !is_float($multiply)){
+	form_set_error('goldprice_multiply', t('This value should be between 1 and 0'));
+  }  
+}
+
+/**
+ * Implement hook permission
+ * Adds an extra permission, this is required for the user to be able to change gold prices
+ */
+function goldprices_permission() {
+  return array(
+	'administer goldprices settings' => array(
+	'title' => t('Administer goldprice settings'),
+	'description' => t('Allow users to change the goldprices.'),
+	),
+  );
+}
